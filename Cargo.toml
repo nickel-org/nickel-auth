@@ -1,0 +1,18 @@
+[package]
+name = "nickel-auth"
+version = "0.1.0"
+authors = ["Simon Persson <simon@flaskpost.org>"]
+
+[dependencies.nickel]
+git = "https://github.com/Ryman/nickel.rs.git"
+branch = "environment"
+
+[dependencies]
+rustc-serialize = "*"
+openssl = "*"
+rand = "0.3"
+byteorder = "*"
+time = "*"
+cookie = "*"
+plugin = "*"
+typemap = "*"
