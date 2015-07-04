@@ -32,4 +32,15 @@ then
 	exit -1
 fi
 
+sleep 10
+
+
+OPEN_SECRET_PAGE_WITH_COOKIE=$(curl -s -b /tmp/cookie "http://localhost:6767/very/secret")
+if [ "$OPEN_SECRET_PAGE_WITH_COOKIE" != "Access denied!" ]
+then
+	echo "Secret page could be reached after cookie expired!"
+	echo $OPEN_SECRET_PAGE_WITH_COOKIE
+	exit -1
+fi
+
 echo "All tests passing!"

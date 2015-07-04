@@ -30,7 +30,7 @@ fn get_authenticator(access_denied: Box<Middleware + Sized + Send + Sync>,
             }
         ),
         Box::new(|username| if username == "foo" { true } else { false }),
-        Duration::seconds(30),
+        Duration::seconds(10),
         access_denied,
         access_granted
     )
