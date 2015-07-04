@@ -100,7 +100,6 @@ impl Authenticator {
         let (timestamp, username) = decrypted_data.split_at(8);
         let timestamp = BigEndian::read_i64(timestamp);
         let username = from_utf8(username).ok().expect("Could not read username as UTF8.");
-        println!("{}", username);
         (username.to_owned(), Timespec::new(timestamp, 0))
     }
     

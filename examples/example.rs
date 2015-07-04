@@ -29,7 +29,7 @@ fn get_authenticator(access_denied: Box<Middleware + Sized + Send + Sync>,
                 )
             }
         ),
-        Box::new(|username| if username == "foo" {true} else { false}),
+        Box::new(|username| if username == "foo" { true } else { false }),
         Duration::seconds(30),
         access_denied,
         access_granted
@@ -45,7 +45,7 @@ fn main() {
     /* Only signed in people should be able to reach routes in this router.
      * Begin by creating a router like normal. */
     let mut secret_router = Router::new();
-    /* Add a routes that are protected. */
+    /* Add routes that are protected. */
     secret_router.post("/login", middleware!{"Successfully logged in.\n"});
     secret_router.get("/very/secret", middleware!{"Some hidden information!\n"});
 
