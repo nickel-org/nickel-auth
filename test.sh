@@ -1,12 +1,12 @@
 OPEN_PAGE=$(curl -s 'http://localhost:6767/')
-if [ "$OPEN_PAGE" != "Public route" ]
+if [ "$OPEN_PAGE" != "You are logged in as: None" ]
 then
-	echo "Root could not be reached!"
+	echo "We we're logged in without having logged in!"
 	echo $OPEN_PAGE
 	exit -1
 fi
 
-OPEN_SECRET_PAGE=$(curl -s 'http://localhost:6767/very/secret')
+OPEN_SECRET_PAGE=$(curl -s 'http://localhost:6767/secret')
 if [ "$OPEN_SECRET_PAGE" != "Access denied!" ]
 then
 	echo "Secret page was reached without signing in!"
@@ -24,7 +24,7 @@ then
 	exit -1
 fi
 
-OPEN_SECRET_PAGE_WITH_COOKIE=$(curl -s -b /tmp/cookie "http://localhost:6767/very/secret")
+OPEN_SECRET_PAGE_WITH_COOKIE=$(curl -s -b /tmp/cookie "http://localhost:6767/secret")
 if [ "$OPEN_SECRET_PAGE_WITH_COOKIE" != "Some hidden information!" ]
 then
 	echo "Secret page could not be reached with cookie!"
@@ -35,7 +35,7 @@ fi
 sleep 10
 
 
-OPEN_SECRET_PAGE_WITH_COOKIE=$(curl -s -b /tmp/cookie "http://localhost:6767/very/secret")
+OPEN_SECRET_PAGE_WITH_COOKIE=$(curl -s -b /tmp/cookie "http://localhost:6767/secret")
 if [ "$OPEN_SECRET_PAGE_WITH_COOKIE" != "Access denied!" ]
 then
 	echo "Secret page could be reached after cookie expired!"

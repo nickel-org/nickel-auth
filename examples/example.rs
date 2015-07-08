@@ -3,9 +3,12 @@ extern crate rustc_serialize;
 extern crate nickel_auth;
 extern crate time;
 
-use nickel::{Nickel, HttpRouter, JsonBody, Middleware, Router};
-use nickel_auth::Authenticator;
+use std::io::Write;
+use nickel::{Nickel, NickelError, Halt, Continue, Request, Action, HttpRouter, JsonBody, Middleware, Router};
+use nickel_auth::{CreateSession, ReadSession, SessionConfig, AuthenticatedSession, Authorizer};
+use nickel::cookies::Cookies;
 use time::{Duration};
+use nickel::status::StatusCode;
 
 #[derive(RustcDecodable, RustcEncodable)]
 struct User {
@@ -13,48 +16,46 @@ struct User {
     password:  String,
 }
 
-fn get_authenticator(access_denied: Box<Middleware + Sized + Send + Sync>,
-               access_granted: Box<Middleware + Sized + Send + Sync>) -> Authenticator
-{
-    Authenticator::new(
-        Box::new(|req| {
-                req.json_as::<User>().ok().map_or(None,
-                    |user|
-                        if user.name == "foo".to_owned()
-                                    && user.password == "bar".to_owned() {
-                                        Some(user.name)
-                                    } else {
-                                        None
-                                    },
-                )
-            }
-        ),
-        Box::new(|username| if username == "foo" { true } else { false }),
-        Duration::seconds(10),
-        access_denied,
-        access_granted
-    )
-}
-
 fn main() {
-    let mut server = Nickel::new();
+    let mut server = Nickel::with_data(SessionConfig::new_with_random_key(Box::new(|_| true), Duration::seconds(10)));
 
     /* Anyone should be able to reach thist route. */
-    server.get("/", middleware!{"Public route\n"});
+    server.get("/", middleware!{|req, res| {
+                        format!("You are logged in as: {:?}\n", req.authenticated_session())
+    }}
+        );
+    server.post("/login", middleware!{|req, mut res| {
+        if let Ok(u) = req.json_as::<User>() {
+            if u.name == "foo" && u.password == "bar" {
+                res.set_session_cookie(u.name);
+                return res.send((StatusCode::Ok, "Successfully logged in."))
+            }
+        }
+        (StatusCode::BadRequest, "Access denied.")
+    }});
 
-    /* Only signed in people should be able to reach routes in this router.
-     * Begin by creating a router like normal. */
-    let mut secret_router = Router::new();
-    /* Add routes that are protected. */
-    secret_router.post("/login", middleware!{"Successfully logged in.\n"});
-    secret_router.get("/very/secret", middleware!{"Some hidden information!\n"});
-
-    /* Wrap the whole router in an Authenticator */
-    let protected_route = get_authenticator(Box::new(middleware!{"Access denied!\n"}),
-                                   Box::new(secret_router)
-                        );
+    server.get("/secret",
+               Authorizer::new(
+                   Box::new(|user| user=="foo"),
+                   Box::new(middleware!{"Some hidden information!\n"})
+                )
+            ); 
     
-    server.utilize(protected_route);
+    fn custom_403<'a>(err: &mut NickelError<SessionConfig>, _req: &mut Request<SessionConfig>) -> Action {
+        if let Some(ref mut res) = err.stream {
+            if res.status() == StatusCode::Forbidden {
+                let _ = res.write_all(b"Access denied!\n");
+                return Halt(())
+            }
+        }
+
+        Continue(())
+    }
+
+    // issue #20178
+    let custom_handler: fn(&mut NickelError<SessionConfig>, &mut Request<SessionConfig>) -> Action = custom_403;
+
+    server.handle_error(custom_handler);
 
     server.listen("127.0.0.1:6767");
 }
