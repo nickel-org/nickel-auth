@@ -17,7 +17,11 @@ struct User {
 }
 
 fn main() {
-    let mut server = Nickel::with_data(SessionConfig::new_with_random_key(Box::new(|_| true), Duration::seconds(10)));
+    let mut server = Nickel::with_data(
+                                SessionConfig::new_with_random_key(Box::new(|user| user=="foo"), 
+                                Duration::seconds(10)
+                            )
+                        );
 
     /* Anyone should be able to reach thist route. */
     server.get("/", middleware!{|req, res| {
