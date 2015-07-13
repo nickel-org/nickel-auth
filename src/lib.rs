@@ -36,15 +36,11 @@ impl< T, D: 'static> Middleware<D> for Authorizer<T, D>
     T: 'static + Any + Encodable + Decodable + Default + Debug
 {
     fn invoke<'a, 'b>(&'a self, mut res: Response<'a, 'b, D>) -> MiddlewareResult<'a, 'b, D> {
-        let mut access_granted: bool;
-        /*
-         * introduce a new scope so that req is not mutably borrowed twice
-         * in the same scope.
-         */
-        {
+        let access_granted = {
             let session = res.session();
-            access_granted = (*self.authorize)(&session);
-        }
+            (self.authorize)(&session)
+        };
+
         if access_granted {
                 self.access_granted.invoke(res)
         } else {
