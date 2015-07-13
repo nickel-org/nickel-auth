@@ -1,38 +1,61 @@
-#[macro_use] extern crate nickel;
+#[macro_use]
+extern crate nickel;
 extern crate rustc_serialize;
 extern crate nickel_auth;
 extern crate time;
 
 use std::io::Write;
-use nickel::{Nickel, NickelError, Halt, Continue, Request, Action, HttpRouter, JsonBody, Middleware, Router};
-use nickel_auth::{CreateSession, ReadSession, SessionConfig, AuthenticatedSession, Authorizer};
-use nickel::cookies::Cookies;
-use time::{Duration};
+use nickel::*;
 use nickel::status::StatusCode;
+use nickel_auth::Authorizer;
+use time::Duration;
 
-#[derive(RustcDecodable, RustcEncodable)]
+#[derive(RustcDecodable, RustcEncodable, Debug, Default)]
 struct User {
     name: String,
-    password:  String,
+    password: String,
+}
+
+fn authorize(user: &Option<String>) -> bool {
+    if let Some(u) = user.as_ref() {
+        if u == "foo" {
+            return true;
+        }
+    }
+    false
+}
+
+struct ServerData;
+
+static SECRET_KEY: &'static cookies::SecretKey = &cookies::SecretKey([0; 32]);
+
+impl AsRef<cookies::SecretKey> for ServerData {
+    fn as_ref(&self) -> &cookies::SecretKey {
+        SECRET_KEY
+    }
+}
+
+impl SessionStore for ServerData {
+    type Store = Option<String>;
+
+    fn timeout() -> Duration {
+        Duration::seconds(5)
+    }
 }
 
 fn main() {
-    let mut server = Nickel::with_data(
-                                SessionConfig::new_with_random_key(Box::new(|user| user=="foo"), 
-                                Duration::seconds(10)
-                            )
-                        );
+    let mut server = Nickel::with_data(ServerData);
 
     /* Anyone should be able to reach thist route. */
-    server.get("/", middleware!{|req, res| {
-                        format!("You are logged in as: {:?}\n", req.authenticated_session())
+    server.get("/", middleware!{|mut res| {
+         format!("You are logged in as: {:?}\n", res.session())
     }}
         );
-    server.post("/login", middleware!{|req, mut res| {
-        if let Ok(u) = req.json_as::<User>() {
+    server.post("/login", middleware!{|mut res| {
+        if let Ok(u) = res.request.json_as::<User>() {
             if u.name == "foo" && u.password == "bar" {
-                res.set_session_cookie(u.name);
-                return res.send((StatusCode::Ok, "Successfully logged in."))
+                *res.session_mut() = Some(u.name);
+                return res.send("Successfully logged in.")
             }
         }
         (StatusCode::BadRequest, "Access denied.")
@@ -40,13 +63,13 @@ fn main() {
 
     server.get("/secret",
                Authorizer::new(
-                   Box::new(|user| user=="foo"),
+                   Box::new(authorize),
                    Box::new(middleware!{"Some hidden information!\n"})
                 )
-            ); 
-    
-    fn custom_403<'a>(err: &mut NickelError<SessionConfig>, _req: &mut Request<SessionConfig>) -> Action {
-        if let Some(ref mut res) = err.stream {
+            );
+
+    fn custom_403<'a>(err: &mut NickelError<ServerData>) -> Action {
+        if let Some(ref mut res) = err.response_mut() {
             if res.status() == StatusCode::Forbidden {
                 let _ = res.write_all(b"Access denied!\n");
                 return Halt(())
@@ -57,7 +80,7 @@ fn main() {
     }
 
     // issue #20178
-    let custom_handler: fn(&mut NickelError<SessionConfig>, &mut Request<SessionConfig>) -> Action = custom_403;
+    let custom_handler: fn(&mut NickelError<ServerData>) -> Action = custom_403;
 
     server.handle_error(custom_handler);
 

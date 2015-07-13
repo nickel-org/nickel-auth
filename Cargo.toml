@@ -5,7 +5,7 @@ authors = ["Simon Persson <simon@flaskpost.org>"]
 
 [dependencies.nickel]
 git = "https://github.com/Ryman/nickel.rs.git"
-branch = "cookies"
+branch = "environment"
 
 [dependencies]
 rustc-serialize = "*"

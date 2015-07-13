@@ -1,4 +1,5 @@
-#[macro_use] extern crate nickel;
+#[macro_use]
+extern crate nickel;
 extern crate openssl;
 extern crate rand;
 extern crate rustc_serialize;
@@ -8,66 +9,46 @@ extern crate cookie;
 extern crate plugin;
 extern crate typemap;
 
-use plugin::{Plugin, Pluggable};
-use cookie::{CookieJar, Cookie};
-use nickel::{Request, Response, Middleware, MiddlewareResult, cookies, Continue, NickelError};
-use openssl::crypto::symm::{Type, encrypt, decrypt};
-use rand::{OsRng, Rng};
-use rustc_serialize::base64::{ToBase64, FromBase64, STANDARD};
-use byteorder::{ByteOrder, BigEndian};
-use time::{now, Timespec, Duration};
-use std::str::from_utf8;
-use nickel::cookies::Cookies;
-use plugin::Extensible;
-use typemap::Key;
-use nickel::status::StatusCode::{Forbidden};
+use std::fmt::Debug;
+use rustc_serialize::{Encodable, Decodable};
+use std::any::Any;
+use nickel::{Response, Middleware, MiddlewareResult, cookies, NickelError, Session, SessionStore};
+use nickel::status::StatusCode::Forbidden;
 
-mod session;
-mod authenticated_session;
-mod authorizer; 
+pub type ValidateUserFunc<T> = Box<Fn(&T) -> bool + Send + Sync>;
 
-pub use authenticated_session::{AuthenticatedSession, ValidateUserFunc};
-pub use session::{ReadSession, CreateSession};
-pub use authorizer::Authorizer;
-
-pub struct SessionConfig {
-    secret_key: cookies::SecretKey,
-    session_length: Duration,
-    authenticate: ValidateUserFunc
+pub struct Authorizer<T, D> {
+    authorize: ValidateUserFunc<T>,
+    access_granted: Box<Middleware<D>+ Sized + Send + Sync>,
 }
 
-impl AsRef<cookies::SecretKey> for SessionConfig {
-    fn as_ref(&self) -> &cookies::SecretKey {
-        &self.secret_key
+impl<T, D> Authorizer<T, D> {
+    pub fn new(authorize: ValidateUserFunc<T>,
+               access_granted: Box<Middleware<D> + Sized + Send + Sync>)
+               -> Authorizer<T, D> {
+        Authorizer { authorize: authorize, access_granted: access_granted }
     }
 }
 
-impl AsRef<Duration> for SessionConfig {
-    fn as_ref(&self) -> &Duration {
-        &self.session_length
-    }
-}
-
-impl AsRef<ValidateUserFunc> for SessionConfig {
-    fn as_ref(&self) -> &ValidateUserFunc {
-        &self.authenticate
-    }
-}
-
-
-impl SessionConfig {
-    pub fn new(secret_key: cookies::SecretKey, authenticate: ValidateUserFunc, session_length: Duration) -> SessionConfig
-    {
-        SessionConfig { secret_key: secret_key, authenticate: authenticate, session_length: session_length }
-    }
-
-    pub fn new_with_random_key(authenticate: ValidateUserFunc, session_length: Duration) -> SessionConfig
-    {
-        let mut rand_gen = OsRng::new()
-                                .ok()
-                                .expect("Could not get OS random generator.");
-        let mut key = [0u8; 32];
-        rand_gen.fill_bytes(&mut key);
-        SessionConfig { secret_key: cookies::SecretKey(key), authenticate: authenticate, session_length: session_length }
+impl< T, D: 'static> Middleware<D> for Authorizer<T, D>
+    where
+    D: AsRef<cookies::SecretKey> + SessionStore<Store=T>,
+    T: 'static + Any + Encodable + Decodable + Default + Debug
+{
+    fn invoke<'a, 'b>(&'a self, mut res: Response<'a, 'b, D>) -> MiddlewareResult<'a, 'b, D> {
+        let mut access_granted: bool;
+        /*
+         * introduce a new scope so that req is not mutably borrowed twice
+         * in the same scope.
+         */
+        {
+            let session = res.session();
+            access_granted = (*self.authorize)(&session);
+        }
+        if access_granted {
+                self.access_granted.invoke(res)
+        } else {
+            Err(NickelError::new(res, "Access denied.", Forbidden))
+        }
     }
 }

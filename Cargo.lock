@@ -4,7 +4,7 @@ version = "0.1.0"
 dependencies = [
  "byteorder 0.3.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "cookie 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
- "nickel 0.5.0 (git+https://github.com/Ryman/nickel.rs.git?branch=cookies)",
+ "nickel 0.5.0 (git+https://github.com/Ryman/nickel.rs.git?branch=environment)",
  "openssl 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "plugin 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -149,8 +149,9 @@ dependencies = [
 [[package]]
 name = "nickel"
 version = "0.5.0"
-source = "git+https://github.com/Ryman/nickel.rs.git?branch=cookies#2cdac29f757f5e25aead58b89234e249dee343a9"
+source = "git+https://github.com/Ryman/nickel.rs.git?branch=environment#feb99028b289dfc877de64a0538e470360ceb8f2"
 dependencies = [
+ "byteorder 0.3.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "cookie 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "groupable 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
