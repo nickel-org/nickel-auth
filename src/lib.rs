@@ -17,12 +17,20 @@ use nickel::status::StatusCode::Forbidden;
 
 pub type ValidateUserFunc<T> = Box<Fn(&T) -> bool + Send + Sync>;
 
-pub struct Authorizer<T, D> {
+pub struct Authorizer<T, D>
+    where
+    T: Encodable + Decodable + Default + Debug,
+    D: SessionStore<Store=T>
+{
     authorize: ValidateUserFunc<T>,
     access_granted: Box<Middleware<D>+ Sized + Send + Sync>,
 }
 
-impl<T, D> Authorizer<T, D> {
+impl<T, D> Authorizer<T, D>
+    where
+    T: Encodable + Decodable + Default + Debug,
+    D: AsRef<cookies::SecretKey> + SessionStore<Store=T>
+{
     pub fn new(authorize: ValidateUserFunc<T>,
                access_granted: Box<Middleware<D> + Sized + Send + Sync>)
                -> Authorizer<T, D> {
