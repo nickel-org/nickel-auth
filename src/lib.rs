@@ -12,7 +12,7 @@ extern crate typemap;
 use std::fmt::Debug;
 use rustc_serialize::{Encodable, Decodable};
 use std::any::Any;
-use nickel::{Response, Middleware, MiddlewareResult, cookies, NickelError, Session, SessionStore};
+use nickel::{Response, Middleware, MiddlewareResult, cookies, Session, SessionStore};
 use nickel::status::StatusCode::Forbidden;
 
 pub type ValidateUserFunc<T> = Box<Fn(&T) -> bool + Send + Sync>;
@@ -44,7 +44,7 @@ impl< T, D: 'static> Middleware<D> for Authorizer<T, D>
         if access_granted {
                 self.access_granted.invoke(res)
         } else {
-            Err(NickelError::new(res, "Access denied.", Forbidden))
+            res.error(Forbidden, "Access denied.")
         }
     }
 }
