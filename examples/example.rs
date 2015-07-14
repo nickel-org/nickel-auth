@@ -7,7 +7,7 @@ extern crate time;
 use std::io::Write;
 use nickel::*;
 use nickel::status::StatusCode;
-use nickel_auth::Authorizer;
+use nickel_auth::{Authorize, AuthorizeSession};
 use time::Duration;
 
 #[derive(RustcDecodable, RustcEncodable, Debug, Default)]
@@ -16,13 +16,21 @@ struct User {
     password: String,
 }
 
-fn authorize(user: &Option<String>) -> bool {
-    if let Some(u) = user.as_ref() {
-        if u == "foo" {
-            return true;
+#[derive(RustcDecodable, RustcEncodable, Debug, Default)]
+struct SessionType(Option<String>);
+
+impl AuthorizeSession for SessionType {
+    type Permissions = bool;
+
+    fn permission(&self) -> bool {
+        let SessionType(ref user) = *self;
+        if let Some(u) = user.as_ref() {
+            if u == "foo" {
+                return true;
+            }
         }
+        false
     }
-    false
 }
 
 struct ServerData;
@@ -36,7 +44,7 @@ impl AsRef<cookies::SecretKey> for ServerData {
 }
 
 impl SessionStore for ServerData {
-    type Store = Option<String>;
+    type Store = SessionType;
 
     fn timeout() -> Duration {
         Duration::seconds(5)
@@ -54,7 +62,7 @@ fn main() {
     server.post("/login", middleware!{|mut res| {
         if let Ok(u) = res.request.json_as::<User>() {
             if u.name == "foo" && u.password == "bar" {
-                *res.session_mut() = Some(u.name);
+                *res.session_mut() = SessionType(Some(u.name));
                 return res.send("Successfully logged in.")
             }
         }
@@ -62,8 +70,8 @@ fn main() {
     }});
 
     server.get("/secret",
-               Authorizer::new(
-                   Box::new(authorize),
+               Authorize::only(
+                   true,
                    Box::new(middleware!{"Some hidden information!\n"})
                 )
             );

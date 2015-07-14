@@ -15,38 +15,44 @@ use std::any::Any;
 use nickel::{Response, Middleware, MiddlewareResult, cookies, Session, SessionStore};
 use nickel::status::StatusCode::Forbidden;
 
-pub type ValidateUserFunc<T> = Box<Fn(&T) -> bool + Send + Sync>;
+pub trait AuthorizeSession {
+    type Permissions = bool;
 
-pub struct Authorizer<T, D>
-    where
-    T: Encodable + Decodable + Default + Debug,
-    D: SessionStore<Store=T>
-{
-    authorize: ValidateUserFunc<T>,
-    access_granted: Box<Middleware<D>+ Sized + Send + Sync>,
+    fn permission(&self) -> Self::Permissions;
 }
 
-impl<T, D> Authorizer<T, D>
+pub struct Authorize<T, D, P>
     where
-    T: Encodable + Decodable + Default + Debug,
-    D: AsRef<cookies::SecretKey> + SessionStore<Store=T>
+    P: 'static + Send + Sync + Eq,
+    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T>,
+    T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
+{ 
+    access_granted: Box<Middleware<D>+ Sized + Send + Sync>,
+    permissions: P
+}
+
+impl<T, D, P> Authorize<T, D, P>
+    where
+    P: 'static + Send + Sync + Eq,
+    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T>,
+    T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
 {
-    pub fn new(authorize: ValidateUserFunc<T>,
+    pub fn only(permissions: P,
                access_granted: Box<Middleware<D> + Sized + Send + Sync>)
-               -> Authorizer<T, D> {
-        Authorizer { authorize: authorize, access_granted: access_granted }
+               -> Authorize<T, D, P> {
+        Authorize { access_granted: access_granted, permissions: permissions }
     }
 }
 
-impl< T, D: 'static> Middleware<D> for Authorizer<T, D>
+impl< T, D, P> Middleware<D> for Authorize<T, D, P>
     where
-    D: AsRef<cookies::SecretKey> + SessionStore<Store=T>,
-    T: 'static + Any + Encodable + Decodable + Default + Debug
+    P: 'static + Send + Sync + Eq,
+    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T>,
+    T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
 {
     fn invoke<'a, 'b>(&'a self, mut res: Response<'a, 'b, D>) -> MiddlewareResult<'a, 'b, D> {
         let access_granted = {
-            let session = res.session();
-            (self.authorize)(&session)
+            res.session().permission() == self.permissions
         };
 
         if access_granted {

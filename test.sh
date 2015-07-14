@@ -1,5 +1,5 @@
 OPEN_PAGE=$(curl -s 'http://localhost:6767/')
-if [ "$OPEN_PAGE" != "You are logged in as: None" ]
+if [ "$OPEN_PAGE" != "You are logged in as: SessionType(None)" ]
 then
 	echo "We we're logged in without having logged in!"
 	echo $OPEN_PAGE
@@ -32,7 +32,7 @@ then
 	exit -1
 fi
 
-sleep 10
+sleep 5
 
 
 OPEN_SECRET_PAGE_WITH_COOKIE=$(curl -s -b /tmp/cookie "http://localhost:6767/secret")
