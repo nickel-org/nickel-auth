@@ -75,12 +75,8 @@ fn main() {
         (StatusCode::BadRequest, "Access denied.")
     }});
 
-    server.get("/secret",
-               Authorize::only(
-                   UserClass::User,
-                   middleware! { "Some hidden information!\n" }
-                )
-            );
+    server.get("/secret", Authorize::any(vec![UserClass::User, UserClass::Admin],
+                                         middleware! { "Some hidden information!\n" }));
 
     fn custom_403<'a>(err: &mut NickelError<ServerData>) -> Action {
         if let Some(ref mut res) = err.response_mut() {
