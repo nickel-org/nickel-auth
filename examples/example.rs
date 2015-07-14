@@ -19,17 +19,23 @@ struct User {
 #[derive(RustcDecodable, RustcEncodable, Debug, Default)]
 struct SessionType(Option<String>);
 
-impl AuthorizeSession for SessionType {
-    type Permissions = bool;
+#[derive(Eq, PartialEq)]
+enum UserClass {User, Admin, None}
 
-    fn permission(&self) -> bool {
+impl AuthorizeSession for SessionType {
+    type Permissions = UserClass;
+
+    fn permission(&self) -> UserClass {
         let SessionType(ref user) = *self;
         if let Some(u) = user.as_ref() {
             if u == "foo" {
-                return true;
+                return UserClass::User;
+            }
+            else if u == "admin" {
+                return UserClass::Admin;
             }
         }
-        false
+        UserClass::None
     }
 }
 
@@ -71,7 +77,7 @@ fn main() {
 
     server.get("/secret",
                Authorize::only(
-                   true,
+                   UserClass::User,
                    Box::new(middleware!{"Some hidden information!\n"})
                 )
             );
