@@ -23,14 +23,13 @@ pub trait AuthorizeSession {
 }
 
 pub struct Authorize<T, D, P, M>
-    where
-    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T> + Send,
-    M: Middleware<D> + Send + Sync + 'static,
-    T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
-{ 
+    where D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store = T> + Send,
+          M: Middleware<D> + Send + Sync + 'static,
+          T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions = P>
+{
     access_granted: Box<M>,
     permissions: <T as AuthorizeSession>::Permissions,
-    _phantom: PhantomData<D>
+    _phantom: PhantomData<D>,
 }
 
 impl<T, D, P, M> Authorize<T, D, P, M>
@@ -40,9 +39,11 @@ impl<T, D, P, M> Authorize<T, D, P, M>
     T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
 {
     pub fn only(permissions: <T as AuthorizeSession>::Permissions,
-               access_granted: Box<M>)
-               -> Authorize<T, D, P, M> {
-        Authorize { access_granted: access_granted, permissions: permissions, _phantom: PhantomData }
+                access_granted: Box<M>)
+                -> Authorize<T, D, P, M> {
+        Authorize { access_granted: access_granted,
+                    permissions: permissions,
+                    _phantom: PhantomData, }
     }
 }
 
