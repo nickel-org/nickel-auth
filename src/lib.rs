@@ -10,6 +10,7 @@ extern crate plugin;
 extern crate typemap;
 
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use rustc_serialize::{Encodable, Decodable};
 use std::any::Any;
 use nickel::{Response, Middleware, MiddlewareResult, cookies, Session, SessionStore};
@@ -21,33 +22,35 @@ pub trait AuthorizeSession {
     fn permission(&self) -> Self::Permissions;
 }
 
-pub struct Authorize<T, D, P>
+pub struct Authorize<T, D, P, M>
     where
-    P: 'static + Send + Sync + Eq,
-    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T>,
+    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T> + Send,
+    M: Middleware<D> + Send + Sync + 'static,
     T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
 { 
-    access_granted: Box<Middleware<D>+ Sized + Send + Sync>,
-    permissions: P
+    access_granted: Box<M>,
+    permissions: <T as AuthorizeSession>::Permissions,
+    _phantom: PhantomData<D>
 }
 
-impl<T, D, P> Authorize<T, D, P>
+impl<T, D, P, M> Authorize<T, D, P, M>
     where
-    P: 'static + Send + Sync + Eq,
-    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T>,
+    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T> + Send,
+    M: Middleware<D> + Send + Sync + 'static,
     T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
 {
-    pub fn only(permissions: P,
-               access_granted: Box<Middleware<D> + Sized + Send + Sync>)
-               -> Authorize<T, D, P> {
-        Authorize { access_granted: access_granted, permissions: permissions }
+    pub fn only(permissions: <T as AuthorizeSession>::Permissions,
+               access_granted: Box<M>)
+               -> Authorize<T, D, P, M> {
+        Authorize { access_granted: access_granted, permissions: permissions, _phantom: PhantomData }
     }
 }
 
-impl< T, D, P> Middleware<D> for Authorize<T, D, P>
+impl< T, D, P, M> Middleware<D> for Authorize<T, D, P, M>
     where
     P: 'static + Send + Sync + Eq,
-    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T>,
+    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T> + Send + Sync,
+    M: Middleware<D> + Send + Sync + 'static,
     T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
 {
     fn invoke<'a, 'b>(&'a self, mut res: Response<'a, 'b, D>) -> MiddlewareResult<'a, 'b, D> {
