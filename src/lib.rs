@@ -58,7 +58,7 @@ where for<'a, 'k> Response<'a, 'k, D>: Cookies,
       M: Middleware<D> + Send + Sync + 'static,
       D: SessionStore,
       D::Store: AuthorizeSession<Permissions=P> + Any,
-      P: Eq +'static + Send + Sync {
+      P: PartialEq +'static + Send + Sync {
     fn invoke<'a, 'b>(&'a self, mut res: Response<'a, 'b, D>) -> MiddlewareResult<'a, 'b, D> {
         let allowed = {
             let current_permission = &res.session().permissions();
