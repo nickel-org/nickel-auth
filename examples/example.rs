@@ -25,7 +25,7 @@ enum UserClass {User, Admin, None}
 impl AuthorizeSession for SessionType {
     type Permissions = UserClass;
 
-    fn permission(&self) -> UserClass {
+    fn permissions(&self) -> UserClass {
         let SessionType(ref user) = *self;
         if let Some(u) = user.as_ref() {
             if u == "foo" {
@@ -78,7 +78,7 @@ fn main() {
     server.get("/secret",
                Authorize::only(
                    UserClass::User,
-                   Box::new(middleware!{"Some hidden information!\n"})
+                   middleware! { "Some hidden information!\n" }
                 )
             );
 

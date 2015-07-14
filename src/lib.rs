@@ -1,66 +1,41 @@
-#[macro_use]
-extern crate nickel;
-extern crate openssl;
-extern crate rand;
-extern crate rustc_serialize;
-extern crate byteorder;
-extern crate time;
-extern crate cookie;
-extern crate plugin;
-extern crate typemap;
+#[macro_use] extern crate nickel;
 
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use rustc_serialize::{Encodable, Decodable};
 use std::any::Any;
-use nickel::{Response, Middleware, MiddlewareResult, cookies, Session, SessionStore};
+use nickel::{Response, Middleware, MiddlewareResult, Session, SessionStore, Cookies};
 use nickel::status::StatusCode::Forbidden;
 
 pub trait AuthorizeSession {
-    type Permissions = bool;
+    type Permissions;
 
-    fn permission(&self) -> Self::Permissions;
+    fn permissions(&self) -> Self::Permissions;
 }
 
-pub struct Authorize<T, D, P, M>
-    where D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store = T> + Send,
+pub struct Authorize<P, M> {
+    access_granted: M,
+    permissions: P,
+}
+
+impl<P, M> Authorize<P, M> {
+    pub fn only<D, S>(permissions: P, access_granted: M) -> Authorize<P, M>
+    where for<'a, 'k> Response<'a, 'k, D>: Cookies + Session<S>,
           M: Middleware<D> + Send + Sync + 'static,
-          T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions = P>
-{
-    access_granted: Box<M>,
-    permissions: <T as AuthorizeSession>::Permissions,
-    _phantom: PhantomData<D>,
-}
-
-impl<T, D, P, M> Authorize<T, D, P, M>
-    where
-    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T> + Send,
-    M: Middleware<D> + Send + Sync + 'static,
-    T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
-{
-    pub fn only(permissions: <T as AuthorizeSession>::Permissions,
-                access_granted: Box<M>)
-                -> Authorize<T, D, P, M> {
-        Authorize { access_granted: access_granted,
-                    permissions: permissions,
-                    _phantom: PhantomData, }
+          S: AuthorizeSession<Permissions=P> {
+        Authorize {
+            access_granted: access_granted,
+            permissions: permissions,
+        }
     }
 }
 
-impl< T, D, P, M> Middleware<D> for Authorize<T, D, P, M>
-    where
-    P: 'static + Send + Sync + Eq,
-    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T> + Send + Sync,
-    M: Middleware<D> + Send + Sync + 'static,
-    T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
-{
+impl<P, M, D> Middleware<D> for Authorize<P, M>
+where for<'a, 'k> Response<'a, 'k, D>: Cookies,
+      M: Middleware<D> + Send + Sync + 'static,
+      D: SessionStore,
+      D::Store: AuthorizeSession<Permissions=P> + Any,
+      P: Eq +'static + Send + Sync {
     fn invoke<'a, 'b>(&'a self, mut res: Response<'a, 'b, D>) -> MiddlewareResult<'a, 'b, D> {
-        let access_granted = {
-            res.session().permission() == self.permissions
-        };
-
-        if access_granted {
-                self.access_granted.invoke(res)
+        if res.session().permissions() == self.permissions {
+            self.access_granted.invoke(res)
         } else {
             res.error(Forbidden, "Access denied.")
         }
