@@ -25,7 +25,7 @@ enum UserClass {User, Admin, None}
 impl AuthorizeSession for SessionType {
     type Permissions = UserClass;
 
-    fn permission(&self) -> UserClass {
+    fn permissions(&self) -> UserClass {
         let SessionType(ref user) = *self;
         if let Some(u) = user.as_ref() {
             if u == "foo" {
@@ -75,12 +75,8 @@ fn main() {
         (StatusCode::BadRequest, "Access denied.")
     }});
 
-    server.get("/secret",
-               Authorize::only(
-                   UserClass::User,
-                   Box::new(middleware!{"Some hidden information!\n"})
-                )
-            );
+    server.get("/secret", Authorize::any(vec![UserClass::User, UserClass::Admin],
+                                         middleware! { "Some hidden information!\n" }));
 
     fn custom_403<'a>(err: &mut NickelError<ServerData>) -> Action {
         if let Some(ref mut res) = err.response_mut() {

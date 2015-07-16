@@ -1,66 +1,76 @@
-#[macro_use]
-extern crate nickel;
-extern crate openssl;
-extern crate rand;
-extern crate rustc_serialize;
-extern crate byteorder;
-extern crate time;
-extern crate cookie;
-extern crate plugin;
-extern crate typemap;
+#[macro_use] extern crate nickel;
 
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use rustc_serialize::{Encodable, Decodable};
 use std::any::Any;
-use nickel::{Response, Middleware, MiddlewareResult, cookies, Session, SessionStore};
+use nickel::{Response, Middleware, MiddlewareResult, Session, SessionStore, Cookies};
 use nickel::status::StatusCode::Forbidden;
 
 pub trait AuthorizeSession {
-    type Permissions = bool;
+    type Permissions;
 
-    fn permission(&self) -> Self::Permissions;
+    fn permissions(&self) -> Self::Permissions;
 }
 
-pub struct Authorize<T, D, P, M>
-    where D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store = T> + Send,
+pub struct Authorize<P, M> {
+    access_granted: M,
+    permissions: Permit<P>,
+}
+
+enum Permit<P> {
+    Only(P),
+    Any(Vec<P>),
+    All(Vec<P>)
+}
+
+impl<P, M> Authorize<P, M> {
+    pub fn only<D, S>(permission: P, access_granted: M) -> Authorize<P, M>
+    where for<'a, 'k> Response<'a, 'k, D>: Cookies + Session<S>,
           M: Middleware<D> + Send + Sync + 'static,
-          T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions = P>
-{
-    access_granted: Box<M>,
-    permissions: <T as AuthorizeSession>::Permissions,
-    _phantom: PhantomData<D>,
-}
+          S: AuthorizeSession<Permissions=P> {
+        Authorize {
+            access_granted: access_granted,
+            permissions: Permit::Only(permission),
+        }
+    }
 
-impl<T, D, P, M> Authorize<T, D, P, M>
-    where
-    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T> + Send,
-    M: Middleware<D> + Send + Sync + 'static,
-    T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
-{
-    pub fn only(permissions: <T as AuthorizeSession>::Permissions,
-                access_granted: Box<M>)
-                -> Authorize<T, D, P, M> {
-        Authorize { access_granted: access_granted,
-                    permissions: permissions,
-                    _phantom: PhantomData, }
+    pub fn any<D, S>(permissions: Vec<P>, access_granted: M) -> Authorize<P, M>
+    where for<'a, 'k> Response<'a, 'k, D>: Cookies + Session<S>,
+          M: Middleware<D> + Send + Sync + 'static,
+          S: AuthorizeSession<Permissions=P> {
+        Authorize {
+            access_granted: access_granted,
+            permissions: Permit::Any(permissions),
+        }
+    }
+
+    pub fn all<D, S>(permissions: Vec<P>, access_granted: M) -> Authorize<P, M>
+    where for<'a, 'k> Response<'a, 'k, D>: Cookies + Session<S>,
+          M: Middleware<D> + Send + Sync + 'static,
+          S: AuthorizeSession<Permissions=P> {
+        Authorize {
+            access_granted: access_granted,
+            permissions: Permit::All(permissions),
+        }
     }
 }
 
-impl< T, D, P, M> Middleware<D> for Authorize<T, D, P, M>
-    where
-    P: 'static + Send + Sync + Eq,
-    D: 'static + AsRef<cookies::SecretKey> + SessionStore<Store=T> + Send + Sync,
-    M: Middleware<D> + Send + Sync + 'static,
-    T: 'static + Any + Encodable + Decodable + Default + Debug + AuthorizeSession<Permissions=P>
-{
+impl<P, M, D> Middleware<D> for Authorize<P, M>
+where for<'a, 'k> Response<'a, 'k, D>: Cookies,
+      M: Middleware<D> + Send + Sync + 'static,
+      D: SessionStore,
+      D::Store: AuthorizeSession<Permissions=P> + Any,
+      P: PartialEq +'static + Send + Sync {
     fn invoke<'a, 'b>(&'a self, mut res: Response<'a, 'b, D>) -> MiddlewareResult<'a, 'b, D> {
-        let access_granted = {
-            res.session().permission() == self.permissions
+        let allowed = {
+            let current_permission = &res.session().permissions();
+            match self.permissions {
+                Permit::Only(ref p) => p == current_permission,
+                Permit::Any(ref ps) => ps.iter().any(|p| p == current_permission),
+                Permit::All(ref ps) => ps.iter().all(|p| p == current_permission),
+            }
         };
 
-        if access_granted {
-                self.access_granted.invoke(res)
+        if allowed {
+            self.access_granted.invoke(res)
         } else {
             res.error(Forbidden, "Access denied.")
         }
