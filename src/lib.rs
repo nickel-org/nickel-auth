@@ -7,7 +7,7 @@ use nickel::status::StatusCode::Forbidden;
 pub trait AuthorizeSession {
     type Permissions;
 
-    fn permissions(&self) -> Self::Permissions;
+    fn has_permission(&self, permission: &Self::Permissions) -> bool;
 }
 
 pub struct Authorize<P, M> {
@@ -61,11 +61,10 @@ where for<'a, 'k> Response<'a, 'k, D>: Cookies,
       P: PartialEq +'static + Send + Sync {
     fn invoke<'a, 'b>(&'a self, mut res: Response<'a, 'b, D>) -> MiddlewareResult<'a, 'b, D> {
         let allowed = {
-            let current_permission = &res.session().permissions();
             match self.permissions {
-                Permit::Only(ref p) => p == current_permission,
-                Permit::Any(ref ps) => ps.iter().any(|p| p == current_permission),
-                Permit::All(ref ps) => ps.iter().all(|p| p == current_permission),
+                Permit::Only(ref p) => res.session().has_permission(p),
+                Permit::Any(ref ps) => ps.iter().any(|p| res.session().has_permission(p)),
+                Permit::All(ref ps) => ps.iter().all(|p| res.session().has_permission(p)),
             }
         };
 

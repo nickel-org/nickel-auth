@@ -20,22 +20,26 @@ struct User {
 struct SessionType(Option<String>);
 
 #[derive(Eq, PartialEq)]
-enum UserClass {User, Admin, None}
+enum UserClass {User, Admin}
 
 impl AuthorizeSession for SessionType {
     type Permissions = UserClass;
 
-    fn permissions(&self) -> UserClass {
-        let SessionType(ref user) = *self;
-        if let Some(u) = user.as_ref() {
-            if u == "foo" {
-                return UserClass::User;
-            }
-            else if u == "admin" {
-                return UserClass::Admin;
+    fn has_permission(&self, permission: &UserClass) -> bool {
+        match *permission {
+            UserClass::User => {
+                match *self {
+                    SessionType(Some(ref u)) => &*u == "foo" || &*u == "admin",
+                    SessionType(None) => false
+                }
+            },
+            UserClass::Admin => {
+                match *self {
+                    SessionType(Some(ref u)) => &*u == "admin",
+                    SessionType(None) => false
+                }
             }
         }
-        UserClass::None
     }
 }
 
