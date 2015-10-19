@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate nickel;
+extern crate nickel_session;
+extern crate nickel_cookies;
 extern crate rustc_serialize;
 extern crate nickel_auth;
 extern crate time;
@@ -7,6 +9,8 @@ extern crate time;
 use std::io::Write;
 use nickel::*;
 use nickel::status::StatusCode;
+use nickel_cookies::{KeyProvider, SecretKey};
+use nickel_session::{Store, CookieSession, Session};
 use nickel_auth::{Authorize, AuthorizeSession};
 use time::Duration;
 
@@ -45,16 +49,16 @@ impl AuthorizeSession for SessionType {
 
 struct ServerData;
 
-static SECRET_KEY: &'static cookies::SecretKey = &cookies::SecretKey([0; 32]);
+static SECRET_KEY: &'static SecretKey = &SecretKey([0; 32]);
 
-impl AsRef<cookies::SecretKey> for ServerData {
-    fn as_ref(&self) -> &cookies::SecretKey {
-        SECRET_KEY
+impl KeyProvider for ServerData {
+    fn key(&self) -> SecretKey {
+        SECRET_KEY.clone()
     }
 }
 
-impl SessionStore for ServerData {
-    type Store = SessionType;
+impl Store for ServerData {
+    type Session = SessionType;
 
     fn timeout() -> Duration {
         Duration::seconds(5)
@@ -65,25 +69,26 @@ fn main() {
     let mut server = Nickel::with_data(ServerData);
 
     /* Anyone should be able to reach thist route. */
-    server.get("/", middleware!{|mut res| {
-         format!("You are logged in as: {:?}\n", res.session())
-    }}
+    server.get("/", middleware!{|req, mut res| <ServerData>
+         format!("You are logged in as: {:?}\n", CookieSession::get_mut(req, &mut res))
+    }
         );
-    server.post("/login", middleware!{|mut res| {
-        if let Ok(u) = res.request.json_as::<User>() {
+    server.post("/login", middleware!{ |req, mut res| <ServerData> 
+        if let Ok(u) = req.json_as::<User>() {
             if u.name == "foo" && u.password == "bar" {
-                *res.session_mut() = SessionType(Some(u.name));
+                *CookieSession::get_mut(req, &mut res) = SessionType(Some(u.name));
                 return res.send("Successfully logged in.")
             }
         }
         (StatusCode::BadRequest, "Access denied.")
-    }});
+    });
 
     server.get("/secret", Authorize::any(vec![UserClass::User, UserClass::Admin],
-                                         middleware! { "Some hidden information!\n" }));
+                                         middleware! { "Some hidden information!\n" })
+    );
 
-    fn custom_403<'a>(err: &mut NickelError<ServerData>) -> Action {
-        if let Some(ref mut res) = err.response_mut() {
+    fn custom_403<'a>(err: &mut NickelError<ServerData>, _: &mut Request<ServerData>) -> Action {
+        if let Some(ref mut res) = err.stream {
             if res.status() == StatusCode::Forbidden {
                 let _ = res.write_all(b"Access denied!\n");
                 return Halt(())
@@ -94,7 +99,7 @@ fn main() {
     }
 
     // issue #20178
-    let custom_handler: fn(&mut NickelError<ServerData>) -> Action = custom_403;
+    let custom_handler: fn(&mut NickelError<ServerData>, &mut Request<ServerData>) -> Action = custom_403;
 
     server.handle_error(custom_handler);
 

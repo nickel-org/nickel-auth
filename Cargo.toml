@@ -3,11 +3,14 @@ name = "nickel-auth"
 version = "0.1.0"
 authors = ["Simon Persson <simon@flaskpost.org>"]
 
-[dependencies.nickel]
-git = "https://github.com/Ryman/nickel.rs.git"
-branch = "environment"
+[dependencies.nickel_cookies]
+git = "https://github.com/nickel-org/cookies.git"
+
+[dependencies.nickel_session]
+git = "https://github.com/nickel-org/session.git"
 
 [dependencies]
+nickel = "*"
 rustc-serialize = "*"
 openssl = "*"
 rand = "0.3"
